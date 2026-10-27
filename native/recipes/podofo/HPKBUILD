@@ -1,0 +1,73 @@
+# Contributor: EUDI Harmony <noreply@example.com>
+# Maintainer: EUDI Harmony <noreply@example.com>
+#
+# 注意: 这里编译的是 EUDI fork (eudi-lib-podofo)，不是上游 podofo。
+# fork 在 src/podofo/main/ 加了 PdfRemoteSignDocumentSession（RQES 远程签名引擎）。
+# 依赖与上游 0.10.x 一致: ZLIB(sysroot)/OpenSSL/Freetype/LibXml2 REQUIRED。
+
+pkgname=podofo
+pkgver=0.3.8
+pkgrel=0
+pkgdesc="EUDI fork of PoDoFo with PdfRemoteSignDocumentSession (RQES PAdES remote signing)."
+url="https://github.com/eu-digital-identity-wallet/eudi-lib-podofo"
+archs=("arm64-v8a")
+license=("LGPL-2.0-or-later")
+depends=("openssl" "freetype2" "libxml2" "libpng")
+makedepends=()
+
+source=""
+downloadpackage=false
+autounpack=false
+buildtools="cmake"
+
+builddir=eudi-lib-podofo
+packagename=$builddir.tar.gz
+
+prepare() {
+    # 幂等: 已存在则不重复 clone
+    if [ ! -d "$builddir/.git" ]; then
+        rm -rf "$builddir"
+        git clone --depth 1 --branch v$pkgver \
+            https://github.com/eu-digital-identity-wallet/eudi-lib-podofo.git "$builddir"
+    fi
+    mkdir -p $builddir/$ARCH-build
+}
+
+build() {
+    cd $builddir
+    export PKG_CONFIG_PATH="$LYCIUM_ROOT/usr/openssl/$ARCH/lib/pkgconfig:$LYCIUM_ROOT/usr/freetype2/$ARCH/lib/pkgconfig:$LYCIUM_ROOT/usr/libxml2/$ARCH/lib/pkgconfig"
+    ${OHOS_SDK}/native/build-tools/cmake/bin/cmake "$@" -DOHOS_ARCH=$ARCH \
+        -DPODOFO_BUILD_STATIC=ON \
+        -DPODOFO_BUILD_TEST=OFF \
+        -DPODOFO_BUILD_EXAMPLES=OFF \
+        -DCMAKE_PREFIX_PATH="$LYCIUM_ROOT/usr/openssl/$ARCH;$LYCIUM_ROOT/usr/freetype2/$ARCH;$LYCIUM_ROOT/usr/libxml2/$ARCH" \
+        -DOPENSSL_ROOT_DIR="$LYCIUM_ROOT/usr/openssl/$ARCH" \
+        -DOPENSSL_INCLUDE_DIR="$LYCIUM_ROOT/usr/openssl/$ARCH/include" \
+        -DOPENSSL_CRYPTO_LIBRARY="$LYCIUM_ROOT/usr/openssl/$ARCH/lib/libcrypto.a" \
+        -DOPENSSL_SSL_LIBRARY="$LYCIUM_ROOT/usr/openssl/$ARCH/lib/libssl.a" \
+        -DFREETYPE_INCLUDE_DIRS="$LYCIUM_ROOT/usr/freetype2/$ARCH/include/freetype2" \
+        -DFREETYPE_LIBRARY="$LYCIUM_ROOT/usr/freetype2/$ARCH/lib/libfreetype.a" \
+        -DLIBXML2_INCLUDE_DIR="$LYCIUM_ROOT/usr/libxml2/$ARCH/include/libxml2" \
+        -DLIBXML2_LIBRARY="$LYCIUM_ROOT/usr/libxml2/$ARCH/lib/libxml2.a" \
+        -DPNG_PNG_INCLUDE_DIR="$LYCIUM_ROOT/usr/libpng/$ARCH/include" \
+        -DPNG_LIBRARY="$LYCIUM_ROOT/usr/libpng/$ARCH/lib/libpng.a" \
+        -B$ARCH-build -S./ -L > `pwd`/$ARCH-build/build.log 2>&1
+    make -j4 -C $ARCH-build >> `pwd`/$ARCH-build/build.log 2>&1
+    ret=$?
+    cd $OLDPWD
+    return $ret
+}
+
+package() {
+    cd $builddir
+    make -C $ARCH-build install >> `pwd`/$ARCH-build/build.log 2>&1
+    cd $OLDPWD
+}
+
+check() {
+    echo "The test must be on an OpenHarmony device!"
+}
+
+cleanbuild() {
+    : # 保留源码目录，便于复用与排查
+}

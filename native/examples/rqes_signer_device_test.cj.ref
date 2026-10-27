@@ -1,0 +1,105 @@
+/*
+ * RQES signer device suite.
+ *
+ * Validates the Cangjie → C FFI → PoDoFo path on a real device end to end, up to
+ * hash extraction. calculateHash() drives the whole native pipeline through the
+ * binding: PdfRemoteSignDocumentSession construction over a real X.509 cert,
+ * PDF parse, signature field + ByteRange preparation, and the SHA-256
+ * SignedAttributes digest. The remote-sign + finalizeSigning round trip is
+ * validated at the C level (see third_party/eudi_lib_rqes/native/REBUILD.md).
+ */
+package eudi_unit_tests
+
+import std.fs.*
+import std.env.*
+import std.collection.ArrayList
+import ohos_app_cangjie_eudi_cjrqes.{PodofoSigner, ConformanceLevel, SHA256_OID, PodofoException}
+
+// Self-signed RSA test certificate (base64 DER), CN=EUDI RQES Test. Test-only.
+let RQES_TEST_CERT_B64 = "MIICzDCCAbQCCQCHW9v6cEKMlTANBgkqhkiG9w0BAQsFADAoMRcwFQYDVQQDDA5FVURJIFJRRVMgVGVzdDENMAsGA1UECgwEVGVzdDAeFw0yNjA5MDMxMzAyNTNaFw0zNjA4MzExMzAyNTNaMCgxFzAVBgNVBAMMDkVVREkgUlFFUyBUZXN0MQ0wCwYDVQQKDARUZXN0MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwOijEU9BLxRj/PVbWuAMsE6Q9aVK6REr9Ol9pm3IPdZPdajiLVpagesSOax3BAWHWJVc9jxTL5pBlMkjXpNBcX+USAFWz07m3uAGJ+Uh/IMVm6eOajFapPOyj4bO3vGAeWrfyuFa8HnANyOwV582HhF5LLOmMx+fvoBfMaX6wrJ+dxy0z51nkY2IMDu8Fw8X888NIITWKsAelAddq38Vtw0We9bmdIU9K6/2amj/4UMgUU27nK43TS/Ri9FzTgR7sEXSx+CC444/WRBjLWEsFqT/Esf+cP+JoaH66J0GZvdan2V0c1qdbXf8BAzxtZBlKA691zBFeIMy9qMtSfzkAwIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQBnKE+9ljIQxNjepi4fW3g9AZ80ECiSSw96ONVQ5oSlIZplHEzSsSx+cx3LxePZeg6778UrUAaa/Au2eGPuke9oAt/KMmu9Oi9YWjuVIGZLQayiOUVpMuvIG4VePnAb1KcckVpcLIdWExqy0XrVaXWThdJd89kEG4o+Wpbs5AJk/U3azgcHBH+Vb7rK4u1CIsMWoDB3XYmRE+BIsaD1iw83HueukXsRmVL25eGPAQoA0cNT6gY42TdZ7Gt0DM0jwxULuITNjYjvxpPUYzGbRU4XPuU6bVsc6Q/aCCI9lk4sEKgnh8mLckomUZ1DNZ21kaRyrxmuBHK3mS2XtymBwrfb"
+
+// 10-digit zero-padded xref offset (PDF cross-reference table format).
+func padOffset10(n: Int64): String {
+    var s = "${n}"
+    while (s.size < 10) {
+        s = "0" + s
+    }
+    return s
+}
+
+// Minimal valid single-page PDF (pure ASCII). xref byte offsets are computed as
+// the bytes are appended, so the table stays self-consistent no matter the
+// object-body lengths — no hand-counted magic numbers to drift.
+func minimalPdfBytes(): Array<UInt8> {
+    let objs = [
+        "<</Type/Catalog/Pages 2 0 R>>",
+        "<</Type/Pages/Kids[3 0 R]/Count 1>>",
+        "<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>"
+    ]
+    var pdf = "%PDF-1.4\n"
+    let offsets = ArrayList<Int64>()
+    var idx = 1
+    for (body in objs) {
+        offsets.add(pdf.size)
+        pdf = pdf + "${idx} 0 obj${body}endobj\n"
+        idx = idx + 1
+    }
+    let xrefPos = pdf.size
+    let count = objs.size + 1
+    pdf = pdf + "xref\n0 ${count}\n"
+    pdf = pdf + "0000000000 65535 f \n"
+    for (off in offsets) {
+        pdf = pdf + "${padOffset10(off)} 00000 n \n"
+    }
+    pdf = pdf + "trailer<</Size ${count}/Root 1 0 R>>\nstartxref\n${xrefPos}\n%%EOF"
+    return pdf.toArray()
+}
+
+// Body split out so the suite wrapper can surface the real throwable (both
+// Exception and Error) as a named failure instead of an opaque CJ_RUN_THREW.
+func runRqesSignerTestsBody(t: DeviceTestRun): Unit {
+    // Device-writable dir (app sandbox temp) — NOT a hard-coded /tmp, which the
+    // app sandbox cannot write on device.
+    let base = getTempDirectory().toString()
+    let dir = "${base}/eudi_rqes_signer_test"
+    if (!exists(dir)) {
+        Directory.create(dir, recursive: true)
+    }
+    let inPath = "${dir}/input.pdf"
+    let outPath = "${dir}/output.pdf"
+    File.writeTo(inPath, minimalPdfBytes())
+    t.check(exists(inPath), "rqes.inputPdfWritten")
+
+    // 1) Open a B-B session over a real cert + PDF through the Cangjie binding.
+    let signer = PodofoSigner(
+        ConformanceLevel.AdesBB, SHA256_OID,
+        inPath, outPath, RQES_TEST_CERT_B64, Array<String>())
+    t.check(signer.isLoaded(), "rqes.sessionLoaded")
+
+    // 2) calculateHash drives the whole native pipeline via C FFI. A 32-byte
+    //    SHA-256 digest, base64url-encoded with '=' padding as %3D, is >= 44 chars.
+    let hash = signer.calculateHash()
+    t.check(!hash.isEmpty(), "rqes.calculateHash.nonEmpty")
+    t.check(hash.size >= 44, "rqes.calculateHash.len (got ${hash.size})")
+
+    signer.close()
+
+    // 3) After close, further calls must throw PodofoException, not crash.
+    var threw = false
+    try {
+        let _ = signer.calculateHash()
+    } catch (e: PodofoException) {
+        threw = true
+    }
+    t.check(threw, "rqes.throwsAfterClose")
+}
+
+func runRqesSignerTests(t: DeviceTestRun): Unit {
+    try {
+        runRqesSignerTestsBody(t)
+    } catch (e: Exception) {
+        t.check(false, "rqes.EXCEPTION ${e}")
+    } catch (e: Error) {
+        t.check(false, "rqes.ERROR ${e}")
+    }
+}

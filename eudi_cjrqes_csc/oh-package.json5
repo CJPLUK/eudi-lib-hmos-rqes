@@ -1,0 +1,11 @@
+{
+  "name": "eudi_cjrqes_csc",
+  "version": "1.0.0",
+  "description": "EUDI RQES CSC API v2 client + PodofoManager orchestration (ports eudi-lib-ios-rqes-csc-swift).",
+  "main": "",
+  "author": "",
+  "types": "./Index.d.ets",
+  "license": "Apache-2.0",
+  "dependencies": {
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "eudi_cjrqes_ui",
+  "version": "1.0.0",
+  "description": "EUDI RQES UI — signing-flow Domain layer (ports eudi-lib-ios-rqes-ui Domain).",
+  "main": "",
+  "author": "",
+  "types": "./Index.d.ets",
+  "license": "Apache-2.0",
+  "dependencies": {
+  }
+}

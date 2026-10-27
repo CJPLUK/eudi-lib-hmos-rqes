@@ -1,0 +1,49 @@
+[package]
+  cjc-version = "1.1.3"
+  compile-option = "--dy-std --cfg=\"${COMPILE_CONDITION}\""
+  description = "EUDI RQES remote-signing native binding (PoDoFo fork over C FFI)."
+  name = "ohos_app_cangjie_eudi_cjrqes"
+  output-type = "dynamic"
+  src-dir = "./src/main/cangjie"
+  target-dir = ""
+  version = "1.0.0"
+
+[dependencies]
+
+[profile]
+  [profile.build]
+    incremental = true
+    lto = ""
+    [profile.build.combined]
+      ohos_app_cangjie_eudi_cjrqes = "dynamic"
+  [profile.customized-option]
+    debug = "-g -Woff all -Won apilevel-check"
+    release = "--fast-math -O2 -s -Woff all -Won apilevel-check"
+  [profile.test]
+
+# `link-option` links our vendored native library (matches the proven pattern in
+# Telegram_Cangjie's entry/cjpm.toml, which uses `link-option = "-L <dir> -lentry"`
+# for its CMake-built native .so). This makes the compiled module .so carry a
+# DT_NEEDED entry for libpodofo_rqes.so, resolving the `foreign func podofo_*`
+# symbols at load time. libpodofo_rqes.so is self-contained (PoDoFo + OpenSSL +
+# FreeType + libxml2 + libpng statically linked; only libc++_shared/libz/libc
+# runtime deps — all OHOS system libs), so eager load at startup cannot fail the
+# way Telegram's FFmpeg dep did (their issue #80). First custom C FFI native lib
+# in the project; to regenerate the .so see native/REBUILD.md.
+[target.aarch64-linux-ohos]
+  compile-option = "-B \"${DEVECO_CANGJIE_HOME}/build-tools/third_party/llvm/bin\" -B \"${DEVECO_OH_NATIVE_HOME}/sysroot/usr/lib/aarch64-linux-ohos\" -L \"${DEVECO_OH_NATIVE_HOME}/sysroot/usr/lib/aarch64-linux-ohos\" -L \"${DEVECO_OH_NATIVE_HOME}/llvm/lib/clang/15.0.4/lib/aarch64-linux-ohos\" -L \"${DEVECO_OH_NATIVE_HOME}/llvm/lib/aarch64-linux-ohos\" --sysroot \"${DEVECO_OH_NATIVE_HOME}/sysroot\""
+  link-option = "-L ./libs/arm64-v8a -lpodofo_rqes"
+[target.aarch64-linux-ohos.bin-dependencies]
+  path-option = ["${AARCH64_LIBS}", "${AARCH64_MACRO_LIBS}", "${AARCH64_KIT_LIBS}", "./libs/arm64-v8a"]
+  package-option = {}
+
+[target.x86_64-linux-ohos]
+  compile-option = "-B \"${DEVECO_CANGJIE_HOME}/build-tools/third_party/llvm/bin\" -B \"${DEVECO_OH_NATIVE_HOME}/sysroot/usr/lib/x86_64-linux-ohos\" -L \"${DEVECO_OH_NATIVE_HOME}/sysroot/usr/lib/x86_64-linux-ohos\" -L \"${DEVECO_OH_NATIVE_HOME}/llvm/lib/clang/15.0.4/lib/x86_64-linux-ohos\" -L \"${DEVECO_OH_NATIVE_HOME}/llvm/lib/x86_64-linux-ohos\" --sysroot \"${DEVECO_OH_NATIVE_HOME}/sysroot\""
+[target.x86_64-linux-ohos.bin-dependencies]
+  path-option = ["${X86_64_OHOS_LIBS}", "${X86_64_OHOS_MACRO_LIBS}", "${X86_64_OHOS_KIT_LIBS}"]
+
+[target.aarch64-apple-darwin]
+  compile-option = "--link-options=\"-rpath @executable_path/../../../sdk/cangjie/build-tools/runtime/lib/darwin_aarch64_cjnative\" --link-options=\"-rpath @executable_path/../../../sdk/cangjie/api/lib/darwin_aarch64_cjnative/kit\" --link-options=\"-rpath @executable_path/../../../sdk/cangjie/api/lib/darwin_aarch64_cjnative/ohos\" --link-options=\"-rpath @executable_path/../../../sdk/cangjie/api/macro/ohos\" --link-options=\"-rpath @executable_path/module/cj_sdk_libraries\""
+[target.aarch64-apple-darwin.bin-dependencies]
+  path-option = ["${AARCH64_LIBS}", "${AARCH64_MACRO_LIBS}", "${AARCH64_KIT_LIBS}"]
+  package-option = {}

@@ -1,0 +1,11 @@
+{
+  "name": "eudi_cjrqes",
+  "version": "1.0.0",
+  "description": "EUDI RQES remote-signing native binding (PoDoFo fork over C FFI).",
+  "main": "",
+  "author": "",
+  "types": "./Index.d.ets",
+  "license": "Apache-2.0",
+  "dependencies": {
+  }
+}

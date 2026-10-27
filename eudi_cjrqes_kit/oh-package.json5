@@ -1,0 +1,11 @@
+{
+  "name": "eudi_cjrqes_kit",
+  "version": "1.0.0",
+  "description": "EUDI RQES Kit — high-level signing orchestration (ports eudi-lib-ios-rqes-kit).",
+  "main": "",
+  "author": "",
+  "types": "./Index.d.ets",
+  "license": "Apache-2.0",
+  "dependencies": {
+  }
+}

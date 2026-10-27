@@ -1,0 +1,9 @@
+{
+  "module": {
+    "name": "eudi_cjrqes_ui",
+    "type": "har",
+    "deviceTypes": [
+      "default"
+    ]
+  }
+}
